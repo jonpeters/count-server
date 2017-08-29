@@ -33,7 +33,8 @@ async function handlePostCategory(req, res, next) {
 /**
  * delete existing categories. this is done using POST because the endpoint
  * supports multi-delete as opposed to requiring the client to
- * initiate many delete requests
+ * initiate many delete requests and express seems to choke on
+ * a DELETE request that contains a body
  */
 
 router.post('/categories', handleDeleteCategories);
@@ -50,6 +51,20 @@ async function handleDeleteCategories(req, res, next) {
     }});
 
     res.send(result);
+}
+
+/**
+ * increment count value
+ */
+
+router.post('/increment-category-count/:id', handleIncrementCategoryCount);
+
+async function handleIncrementCategoryCount(req, res, next) {
+    let mongoDbObjectId = mongo.ObjectId(req.params.id);
+    let db = await mongoClient.connect(mongoUrl);
+    let categoriesCollection = await db.collection(categoriesCollectionName);
+    let result = await categoriesCollection.findOneAndUpdate({ _id: mongoDbObjectId }, { $inc: { count: 1 }}, { returnOriginal: false });
+    res.send(result.value);
 }
 
 module.exports = router;
