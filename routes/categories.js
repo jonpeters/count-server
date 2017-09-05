@@ -91,6 +91,10 @@ router.get('/time-series', handleGetTimeseries);
 
 async function handleGetTimeseries(req, res, next) {
     let oneHourInMs = 60*60*1000;
+    let oneDayInMs = 24*oneHourInMs;
+
+    let groupBy = req.query.groupBy;
+    let groupByValue = groupBy === "hour" ? oneHourInMs : oneDayInMs;
 
     let start = req.query.start;
     // truncate to start of hour
@@ -114,7 +118,7 @@ async function handleGetTimeseries(req, res, next) {
     while (await cursor.hasNext()) {
         let instantDoc = await cursor.next();
         // round to hour
-        let value = instantDoc.unix_timestamp - (instantDoc.unix_timestamp % oneHourInMs);
+        let value = instantDoc.unix_timestamp - (instantDoc.unix_timestamp % groupByValue);
         // add the hash key, if does not exist
         if (!hash[value]) hash[value] = 0;
         // increment
