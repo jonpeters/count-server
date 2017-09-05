@@ -19,6 +19,19 @@ async function handleGetCategories(req, res, next) {
 }
 
 /**
+ * retrieve a specified category
+ */
+
+router.get('/category/:id', handleGetCategory);
+
+async function handleGetCategory(req, res, next) {
+    let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.params.id);
+    let db = await mongoClient.connect(mongoUrl);
+    let result = await db.collection(categoriesCollectionName).findOne({ _id: categoryIdAsMongoDbObjectId });
+    res.send(result);
+}
+
+/**
  * create a new category
  */
 
