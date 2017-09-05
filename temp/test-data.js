@@ -29,4 +29,28 @@ async function execute() {
     process.exit(-1);
 }
 
-execute();
+async function executeOneMonth() {
+    let db = await mongoClient.connect(mongoUrl);
+    let categoriesCollection = await db.collection(categoriesCollectionName);
+    let instantsCollection = await db.collection(instantsCollectionName);
+
+    // add a category
+    let result = await categoriesCollection.insertOne({"name": "Test Category", "count": 0});
+    result = result.ops[0];
+
+    let today = Date.now();
+    let oneMonthAgo = today - (30 * 24 * 60 * 60 * 1000);
+    let diff = today-oneMonthAgo;
+
+    for (let i=0; i<5000; i++) {
+        await instantsCollection.insertOne({
+            "category_id": result._id,
+            "unix_timestamp": oneMonthAgo + Math.floor((Math.random() * diff))
+        });
+    }
+
+    console.log("start=" + oneMonthAgo + "&end=" + (today+(24*60*60*1000)) + "&category_id=" + result._id);
+    process.exit(-1);
+}
+
+executeOneMonth();

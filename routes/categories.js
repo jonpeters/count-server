@@ -93,11 +93,11 @@ async function handleGetTimeseries(req, res, next) {
     let oneHourInMs = 60*60*1000;
 
     let start = req.query.start;
-    // truncate to hour
+    // truncate to start of hour
     start = start - (start % oneHourInMs);
 
     let end = req.query.end;
-    // truncate to hour then add 1 hour
+    // truncate to start of hour then add 1 hour
     end = end - (end % oneHourInMs) + oneHourInMs;
 
     let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.query.category_id);
