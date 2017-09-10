@@ -1,8 +1,7 @@
 var express = require('express');
 var router = express.Router();
 let mongo = require('mongodb');
-let mongoClient = mongo.MongoClient;
-let mongoUrl = "mongodb://localhost:27017/count";
+
 let categoriesCollectionName = "categories";
 let instantsCollectionName = "instants";
 
@@ -13,7 +12,7 @@ let instantsCollectionName = "instants";
 router.get('/categories', handleGetCategories);
 
 async function handleGetCategories(req, res, next) {
-    let db = await mongoClient.connect(mongoUrl);
+    let db = req.app.db;
     let items = await db.collection(categoriesCollectionName).find({}).toArray();
     res.send(items);
 }
@@ -26,7 +25,7 @@ router.get('/category/:id', handleGetCategory);
 
 async function handleGetCategory(req, res, next) {
     let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.params.id);
-    let db = await mongoClient.connect(mongoUrl);
+    let db = req.app.db;
     let result = await db.collection(categoriesCollectionName).findOne({ _id: categoryIdAsMongoDbObjectId });
     res.send(result);
 }
@@ -38,7 +37,7 @@ async function handleGetCategory(req, res, next) {
 router.post('/category', handlePostCategory);
 
 async function handlePostCategory(req, res, next) {
-    let db = await mongoClient.connect(mongoUrl);
+    let db = req.app.db;
     let categoriesCollection = await db.collection(categoriesCollectionName);
     let result = await categoriesCollection.insertOne(req.body);
     res.send(result.ops[0]);
@@ -58,7 +57,7 @@ async function handleDeleteCategories(req, res, next) {
     // need to map string IDs back to mongo types
     let categoryIdsAsMongoDbObjectIds = req.body.map(id => mongo.ObjectId(id));
 
-    let db = await mongoClient.connect(mongoUrl);
+    let db = req.app.db;
     let categoriesCollection = await db.collection(categoriesCollectionName);
 
     let result = await categoriesCollection.deleteMany({ _id: {
@@ -76,7 +75,7 @@ router.post('/increment-category-count/:id', handleIncrementCategoryCount);
 
 async function handleIncrementCategoryCount(req, res, next) {
     let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.params.id);
-    let db = await mongoClient.connect(mongoUrl);
+    let db = req.app.db;
     let categoriesCollection = await db.collection(categoriesCollectionName);
 
     // increment the category's count
@@ -119,7 +118,7 @@ async function handleGetTimeseries(req, res, next) {
 
     let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.query.category_id);
 
-    let db = await mongoClient.connect(mongoUrl);
+    let db = req.app.db;
     let instantsCollection = await db.collection(instantsCollectionName);
 
     let cursor = await instantsCollection.find({ $and: [{ "category_id": categoryIdAsMongoDbObjectId }, { "unix_timestamp": { $gte: start }}, { "unix_timestamp": { $lt: end }} ] });
