@@ -5,6 +5,9 @@ let mongo = require('mongodb');
 let categoriesCollectionName = "categories";
 let instantsCollectionName = "instants";
 
+let _1_HOUR_IN_MS = 60*60*1000;
+let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
+
 /**
  * retrieve all categories in the system
  */
@@ -102,19 +105,21 @@ async function handleIncrementCategoryCount(req, res, next) {
 router.get('/time-series', handleGetTimeseries);
 
 async function handleGetTimeseries(req, res, next) {
-    let oneHourInMs = 60*60*1000;
-    let oneDayInMs = 24*oneHourInMs;
+    // TODO validate parameter exists
+    let groupByValue = req.query["groupBy"] === "hour" ? _1_HOUR_IN_MS : _24_HOURS_IN_MS;
 
-    let groupBy = req.query.groupBy;
-    let groupByValue = groupBy === "hour" ? oneHourInMs : oneDayInMs;
+    let start = req.query["start"];
 
-    let start = req.query.start;
-    // truncate to start of hour
-    start = start - (start % oneHourInMs);
+    // truncate to start of unit, e.g. when grouping by hour, it's more
+    // correct to get all data for that entire hour, thus if 11:47:00
+    // is provided as the start time, truncate it to 11:00:00
+    start = start - (start % groupByValue);
 
-    let end = req.query.end;
-    // truncate to start of hour then add 1 hour
-    end = end - (end % oneHourInMs) + oneHourInMs;
+    let end = req.query["end"];
+
+    // truncate to start of unit then add 1 unit, e.g. again this gets
+    // the full hour of data for the hour in which the end date falls
+    end = end - (end % groupByValue) + groupByValue;
 
     let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.query.category_id);
 
