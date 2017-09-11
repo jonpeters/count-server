@@ -131,7 +131,7 @@ async function handleGetTimeseries(req, res, next) {
     // map the component date returned by the query back to a single unix timestamp value
     results = results.map(r => {
        return {
-           unix_timestamp: Date.UTC(r._id.year, r._id.month, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0),
+           unix_timestamp: Date.UTC(r._id.year, r._id.month-1, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0),
            count: r.count
        };
     });
