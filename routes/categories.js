@@ -106,7 +106,8 @@ router.get('/time-series', handleGetTimeseries);
 
 async function handleGetTimeseries(req, res, next) {
     // TODO validate parameter exists
-    let groupByValue = req.query["groupBy"] === "hour" ? _1_HOUR_IN_MS : _24_HOURS_IN_MS;
+    let groupByLevel = req.query["groupBy"];
+    let groupByValue = groupByLevel === "hour" ? _1_HOUR_IN_MS : _24_HOURS_IN_MS;
 
     let start = req.query["start"];
 
@@ -121,32 +122,108 @@ async function handleGetTimeseries(req, res, next) {
     // the full hour of data for the hour in which the end date falls
     end = end - (end % groupByValue) + groupByValue;
 
-    let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.query.category_id);
-
     let db = req.app.db;
     let instantsCollection = await db.collection(instantsCollectionName);
 
-    let cursor = await instantsCollection.find({ $and: [{ "category_id": categoryIdAsMongoDbObjectId }, { "unix_timestamp": { $gte: start }}, { "unix_timestamp": { $lt: end }} ] });
+    // execute query via mongo aggregation framework
+    let results = await instantsCollection.aggregate(getTimeSeriesQuery(groupByLevel, req.query["category_id"], start, end)).toArray();
 
-    // store count per hour, keyed by hour
-    let hash = {};
+    // map the component date returned by the query back to a single unix timestamp value
+    results = results.map(r => {
+       return {
+           unix_timestamp: Date.UTC(r._id.year, r._id.month, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0),
+           count: r.count
+       };
+    });
 
-    // perform in-memory aggregation
-    while (await cursor.hasNext()) {
-        let instantDoc = await cursor.next();
-        // round to hour
-        let value = instantDoc.unix_timestamp - (instantDoc.unix_timestamp % groupByValue);
-        // add the hash key, if does not exist
-        if (!hash[value]) hash[value] = 0;
-        // increment
-        hash[value]++;
-    }
+    res.send(results);
+}
 
-    let result = [];
+// ordered by increasing dependency; i.e. "month" is dependant on "year", "day" is dependent on "month" AND "year", etc.
+let groupByDefinition = [ "year", "month", "day", "hour" ];
 
-    Object.keys(hash).forEach(key => result.push({ unix_timestamp: parseInt(key), value: hash[key] }));
+function getTimeSeriesQuery(groupByLevel, categoryId, start, end) {
+    let match = {
+        "$match": {
+            "$and": [
+                {
+                    "category_id": mongo.ObjectId(categoryId)
+                },
+                {
+                    "unix_timestamp": {
+                        "$gte": start
+                    }
+                },
+                {
+                    "unix_timestamp": {
+                        "$lt": end
+                    }
+                }
+            ]
+        }
+    };
 
-    res.send(result);
+    let projectDate = {
+        "$project": {
+            "unix_timestamp": {
+                "$add": [
+                    new Date(0),
+                    "$unix_timestamp"
+                ]
+            }
+        }
+    };
+
+    let projectDateSplit = {
+        $project: {
+            "year": {
+                "$year": "$unix_timestamp"
+            },
+            "month": {
+                "$month": "$unix_timestamp"
+            },
+            "day": {
+                "$dayOfMonth": "$unix_timestamp"
+            },
+            "hour": {
+                "$hour": "$unix_timestamp"
+            }
+        }
+    };
+
+    let index = groupByDefinition.indexOf(groupByLevel);
+
+    // since the grouping levels in the array are defined in order of increasing dependency
+    // all grouping levels to the right of the selected grouping level can be removed
+    // from the aggregation objects
+    for (let i=index+1; i<groupByDefinition.length; i++) delete projectDateSplit.$project[groupByDefinition[i]];
+
+    let groupBy = {
+        "$group": {
+            "_id": {
+                "year": "$year",
+                "month": "$month",
+                "day": "$day",
+                "hour": "$hour"
+            },
+            "count": {
+                "$sum": 1
+            }
+        }
+    };
+
+    for (let i=index+1; i<groupByDefinition.length; i++) delete groupBy.$group._id[groupByDefinition[i]];
+
+    let sort = {
+        "$sort": {
+            "_id.year": 1,
+            "_id.month": 1,
+            "_id.day": 1,
+            "_id.hour": 1
+        }
+    };
+
+    return [match, projectDate, projectDateSplit, groupBy, sort];
 }
 
 module.exports = router;
