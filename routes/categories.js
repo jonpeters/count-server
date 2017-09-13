@@ -1,4 +1,5 @@
 var express = require('express');
+var expressJoi = require('express-joi');
 var router = express.Router();
 let mongo = require('mongodb');
 
@@ -7,6 +8,8 @@ let instantsCollectionName = "instants";
 
 let _1_HOUR_IN_MS = 60*60*1000;
 let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
+
+var Joi = expressJoi.Joi;
 
 /**
  * retrieve all categories in the system
@@ -102,10 +105,16 @@ async function handleIncrementCategoryCount(req, res, next) {
  * retrieve instants data
  */
 
-router.get('/time-series', handleGetTimeseries);
+var getTimeSeriesSchema = {
+    start: Joi.types.number().required(),
+    end: Joi.types.number().required(),
+    category_id: Joi.types.string().required(),
+    groupBy: Joi.types.string().valid("hour", "day").required()
+};
+
+router.get('/time-series', expressJoi.joiValidate(getTimeSeriesSchema), handleGetTimeseries);
 
 async function handleGetTimeseries(req, res, next) {
-    // TODO validate parameter exists
     let groupByLevel = req.query["groupBy"];
     let groupByValue = groupByLevel === "hour" ? _1_HOUR_IN_MS : _24_HOURS_IN_MS;
 
