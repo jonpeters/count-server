@@ -4,10 +4,8 @@ var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
-
-let mongo = require('mongodb');
-// TODO create property
-let mongoUrl = "mongodb://localhost:27017/count";
+var db = require('./db.js');
+var mongo = require('mongodb');
 
 
 var index = require('./routes/index');
@@ -49,7 +47,7 @@ app.use(function(err, req, res, next) {
 });
 
 // create mongo connection
-mongo.MongoClient.connect(mongoUrl, (err, db) => {
+mongo.MongoClient.connect(db.url, (err, db) => {
     app.db = db;
 });
 
