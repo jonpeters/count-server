@@ -1,12 +1,14 @@
 let express = require('express');
 let bcrypt = require('bcrypt-nodejs');
-let jwt = require('jsonwebtoken');
+let common = require('./common');
 
 // TODO verify that this creates a new router instance and that installing middleware to it only
 // affects this instance
 let router = express.Router();
 
 router.post("/", handleAuthenticate);
+
+const authenticationFailureMessage = "Username/password combination is not valid.";
 
 async function handleAuthenticate(req, res) {
     let db = req.app.get("db");
@@ -19,7 +21,7 @@ async function handleAuthenticate(req, res) {
     if (!user) {
         res.json({
             success: false,
-            message: 'Authentication failed. User not found.'
+            message: authenticationFailureMessage
         });
 
         return;
@@ -27,19 +29,11 @@ async function handleAuthenticate(req, res) {
 
     bcrypt.compare(password, user.password, function(err, result) {
         if (result) {
-            var token = jwt.sign(user, req.app.get('secret'), {
-                // 24 hours
-                expiresIn: 24*60*60
-            });
-
-            res.json({
-                success: true,
-                token: token
-            });
+            common.returnSucessfulResponseWithToken(req, res, user);
         } else {
             res.json({
                 success: false,
-                message: 'Authentication failed. Wrong password.'
+                message: authenticationFailureMessage
             });
         }
     });

@@ -11,7 +11,8 @@ var jwt = require('jsonwebtoken');
 
 var index = require('./routes/index');
 var categories = require('./routes/categories');
-var auth = require('./routes/auth.js');
+var auth = require('./routes/auth');
+var signUp = require('./routes/sign-up');
 
 var app = express();
 
@@ -32,6 +33,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', index);
 app.use('/api/secure', categories);
 app.use('/api/authenticate', auth);
+app.use('/api/sign-up', signUp);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
