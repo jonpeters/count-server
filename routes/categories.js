@@ -20,9 +20,11 @@ var Joi = expressJoi.Joi;
 
 router.get('/categories', handleGetCategories);
 
-async function handleGetCategories(req, res, next) {
+async function handleGetCategories(req, res) {
     let db = req.app.get("db");
-    let items = await db.collection(categoriesCollectionName).find({}).toArray();
+    // allow access to only requesting user's data
+    let criteria = { user_id: mongo.ObjectId(req.tokenDecoded._id) };
+    let items = await db.collection(categoriesCollectionName).find(criteria).toArray();
     res.send(items);
 }
 
@@ -32,10 +34,17 @@ async function handleGetCategories(req, res, next) {
 
 router.get('/category/:id', handleGetCategory);
 
-async function handleGetCategory(req, res, next) {
-    let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.params.id);
+async function handleGetCategory(req, res) {
     let db = req.app.get("db");
-    let result = await db.collection(categoriesCollectionName).findOne({ _id: categoryIdAsMongoDbObjectId });
+
+    let criteria = {
+        _id: mongo.ObjectId(req.params.id),
+        // allow access to only requesting user's data
+        user_id: mongo.ObjectId(req.tokenDecoded._id)
+    }
+
+    let result = await db.collection(categoriesCollectionName).findOne(criteria);
+
     res.send(result);
 }
 
@@ -45,10 +54,17 @@ async function handleGetCategory(req, res, next) {
 
 router.post('/category', handlePostCategory);
 
-async function handlePostCategory(req, res, next) {
+async function handlePostCategory(req, res) {
     let db = req.app.get("db");
     let categoriesCollection = await db.collection(categoriesCollectionName);
-    let result = await categoriesCollection.insertOne(req.body);
+
+    // set the parent user reference
+    let object = Object.assign({}, req.body, { user_id: mongo.ObjectId(req.tokenDecoded._id) });
+
+    // insert
+    let result = await categoriesCollection.insertOne(object);
+
+    // return the inserted record
     res.send(result.ops[0]);
 }
 
@@ -61,17 +77,25 @@ async function handlePostCategory(req, res, next) {
 
 router.post('/categories', handleDeleteCategories);
 
-async function handleDeleteCategories(req, res, next) {
-
-    // need to map string IDs back to mongo types
-    let categoryIdsAsMongoDbObjectIds = req.body.map(id => mongo.ObjectId(id));
-
+async function handleDeleteCategories(req, res) {
     let db = req.app.get("db");
     let categoriesCollection = await db.collection(categoriesCollectionName);
 
-    let result = await categoriesCollection.deleteMany({ _id: {
-        $in: categoryIdsAsMongoDbObjectIds
-    }});
+    let criteria = {
+        $and: [
+            {
+                _id: {
+                    $in: req.body.map(id => mongo.ObjectId(id))
+                }
+            },
+            {
+                // allow access to only requesting user's data
+                user_id: mongo.ObjectId(req.tokenDecoded._id)
+            }
+        ]
+    };
+
+    let result = await categoriesCollection.deleteMany(criteria);
 
     res.send(result);
 }
@@ -82,14 +106,28 @@ async function handleDeleteCategories(req, res, next) {
 
 router.post('/increment-category-count/:id', handleIncrementCategoryCount);
 
-async function handleIncrementCategoryCount(req, res, next) {
-    let categoryIdAsMongoDbObjectId = mongo.ObjectId(req.params.id);
+async function handleIncrementCategoryCount(req, res) {
     let db = req.app.get("db");
     let categoriesCollection = await db.collection(categoriesCollectionName);
 
+    let categoryId = mongo.ObjectId(req.params.id);
+    let userId = mongo.ObjectId(req.tokenDecoded._id);
+
+    let criteria = {
+        $and: [
+            {
+                _id: categoryId
+            },
+            {
+                // allow access to only requesting user's data
+                user_id: userId
+            }
+        ]
+    };
+
     // increment the category's count
     let result = await categoriesCollection.findOneAndUpdate(
-        { _id: categoryIdAsMongoDbObjectId },
+        criteria,
         { $inc: { count: 1 }},
         { returnOriginal: false });
 
@@ -97,8 +135,10 @@ async function handleIncrementCategoryCount(req, res, next) {
 
     // add the actual instant
     instantsCollection.insertOne({
-        category_id: categoryIdAsMongoDbObjectId,
-        unix_timestamp: Date.now()
+        category_id: categoryId,
+        unix_timestamp: Date.now(),
+        // allow access to only requesting user's data
+        user_id: userId
     });
 
     res.send(result.value);
@@ -117,7 +157,7 @@ var getTimeSeriesSchema = {
 
 router.get('/time-series', expressJoi.joiValidate(getTimeSeriesSchema), handleGetTimeseries);
 
-async function handleGetTimeseries(req, res, next) {
+async function handleGetTimeseries(req, res) {
     let groupByLevel = req.query["groupBy"];
     let groupByValue = groupByLevel === "hour" ? _1_HOUR_IN_MS : _24_HOURS_IN_MS;
 
@@ -138,7 +178,8 @@ async function handleGetTimeseries(req, res, next) {
     let instantsCollection = await db.collection(instantsCollectionName);
 
     // execute query via mongo aggregation framework
-    let results = await instantsCollection.aggregate(getTimeSeriesQuery(groupByLevel, req.query["category_id"], start, end)).toArray();
+    let timeSeriesQuery = getTimeSeriesQuery(groupByLevel, req.query["category_id"], req.tokenDecoded._id, start, end);
+    let results = await instantsCollection.aggregate(timeSeriesQuery).toArray();
 
     // map the component date returned by the query back to a single unix timestamp value
     results = results.map(r => {
@@ -154,12 +195,16 @@ async function handleGetTimeseries(req, res, next) {
 // ordered by increasing dependency; i.e. "month" is dependant on "year", "day" is dependent on "month" AND "year", etc.
 let groupByDefinition = [ "year", "month", "day", "hour" ];
 
-function getTimeSeriesQuery(groupByLevel, categoryId, start, end) {
+function getTimeSeriesQuery(groupByLevel, categoryId, userId, start, end) {
     let match = {
         "$match": {
             "$and": [
                 {
                     "category_id": mongo.ObjectId(categoryId)
+                },
+                // allow access to only requesting user's data
+                {
+                    "user_id": mongo.ObjectId(userId)
                 },
                 {
                     "unix_timestamp": {
