@@ -15,6 +15,30 @@ let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
 var Joi = expressJoi.Joi;
 
 /**
+ * retrieve all instants for a category
+ */
+
+var getInstantsSchema = {
+    category_id: Joi.types.string().required()
+};
+
+router.get('/instants', expressJoi.joiValidate(getInstantsSchema), handleGetInstants);
+
+async function handleGetInstants(req, res) {
+    let db = req.app.get("db");
+
+    let criteria = {
+        category_id: mongo.ObjectId(req.query["category_id"]),
+        user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
+    };
+
+    // TODO support paging
+    let instants = await db.collection(instantsCollectionName).find(criteria).toArray();
+
+    res.send(instants);
+}
+
+/**
  * retrieve all categories in the system
  */
 
@@ -22,8 +46,11 @@ router.get('/categories', handleGetCategories);
 
 async function handleGetCategories(req, res) {
     let db = req.app.get("db");
-    // allow access to only requesting user's data
-    let criteria = { user_id: mongo.ObjectId(req.tokenDecoded._id) };
+
+    let criteria = {
+        user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
+    };
+
     let items = await db.collection(categoriesCollectionName).find(criteria).toArray();
     res.send(items);
 }
@@ -39,8 +66,7 @@ async function handleGetCategory(req, res) {
 
     let criteria = {
         _id: mongo.ObjectId(req.params.id),
-        // allow access to only requesting user's data
-        user_id: mongo.ObjectId(req.tokenDecoded._id)
+        user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
     }
 
     let result = await db.collection(categoriesCollectionName).findOne(criteria);
@@ -89,8 +115,7 @@ async function handleDeleteCategories(req, res) {
                 }
             },
             {
-                // allow access to only requesting user's data
-                user_id: mongo.ObjectId(req.tokenDecoded._id)
+                user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
             }
         ]
     };
@@ -119,8 +144,7 @@ async function handleIncrementCategoryCount(req, res) {
                 _id: categoryId
             },
             {
-                // allow access to only requesting user's data
-                user_id: userId
+                user_id: userId // allow access to only requesting user's data
             }
         ]
     };
@@ -137,8 +161,7 @@ async function handleIncrementCategoryCount(req, res) {
     instantsCollection.insertOne({
         category_id: categoryId,
         unix_timestamp: Date.now(),
-        // allow access to only requesting user's data
-        user_id: userId
+        user_id: userId     // allow access to only requesting user's data
     });
 
     res.send(result.value);
@@ -202,9 +225,8 @@ function getTimeSeriesQuery(groupByLevel, categoryId, userId, start, end) {
                 {
                     "category_id": mongo.ObjectId(categoryId)
                 },
-                // allow access to only requesting user's data
                 {
-                    "user_id": mongo.ObjectId(userId)
+                    "user_id": mongo.ObjectId(userId)   // allow access to only requesting user's data
                 },
                 {
                     "unix_timestamp": {

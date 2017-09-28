@@ -1,1 +1,6 @@
 - add index to username on users collection
+
+- add remaining joi endpoint validations
+
+- fill in gaps in time-series data to get a truer graph; e.g. the graph end-bound is only the latest data in the
+system but probably should be "now"
