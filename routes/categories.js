@@ -159,9 +159,29 @@ router.post('/categories', util.asyncErrorHandler(handleDeleteCategories));
 
 async function handleDeleteCategories(req, res) {
     let db = req.app.get("db");
+
+    let instantsCollection = await db.collection(instantsCollectionName);
+
+    // delete instants associated to categories being deleted
+    let deleteInstantsCriteria = {
+        $and: [
+            {
+                category_id: {
+                    $in: req.body.map(id => mongo.ObjectId(id))
+                }
+            },
+            {
+                user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
+            }
+        ]
+    };
+
+    await instantsCollection.deleteMany(deleteInstantsCriteria);
+
     let categoriesCollection = await db.collection(categoriesCollectionName);
 
-    let criteria = {
+    // delete categories
+    let deleteCategoriesCriteria = {
         $and: [
             {
                 _id: {
@@ -174,9 +194,7 @@ async function handleDeleteCategories(req, res) {
         ]
     };
 
-    let result = await categoriesCollection.deleteMany(criteria);
-
-    // TODO delete instants corresponding to categories being deleted
+    let result = await categoriesCollection.deleteMany(deleteCategoriesCriteria);
 
     res.send(result);
 }
