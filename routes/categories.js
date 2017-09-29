@@ -249,7 +249,8 @@ var getTimeSeriesSchema = {
     start: Joi.types.number().required(),
     end: Joi.types.number().required(),
     category_id: Joi.types.string().required(),
-    groupBy: Joi.types.string().valid("hour", "day").required()
+    groupBy: Joi.types.string().valid("hour", "day").required(),
+    offset: Joi.types.number().required()
 };
 
 router.get('/time-series', expressJoi.joiValidate(getTimeSeriesSchema), util.asyncErrorHandler(handleGetTimeseries));
@@ -257,6 +258,7 @@ router.get('/time-series', expressJoi.joiValidate(getTimeSeriesSchema), util.asy
 async function handleGetTimeseries(req, res) {
     let groupByLevel = req.query["groupBy"];
     let groupByValue = groupByLevel === "hour" ? _1_HOUR_IN_MS : _24_HOURS_IN_MS;
+    let offset = req.query["offset"] * -1 * 60 * 1000;
 
     let start = req.query["start"];
 
@@ -275,7 +277,7 @@ async function handleGetTimeseries(req, res) {
     let instantsCollection = await db.collection(instantsCollectionName);
 
     // execute query via mongo aggregation framework
-    let timeSeriesQuery = getTimeSeriesQuery(groupByLevel, req.query["category_id"], req.tokenDecoded._id, start, end);
+    let timeSeriesQuery = getTimeSeriesQuery(groupByLevel, req.query["category_id"], req.tokenDecoded._id, start, end, offset);
     let results = await instantsCollection.aggregate(timeSeriesQuery).toArray();
 
     // map the component date returned by the query back to a single unix timestamp value
@@ -292,7 +294,7 @@ async function handleGetTimeseries(req, res) {
 // ordered by increasing dependency; i.e. "month" is dependant on "year", "day" is dependent on "month" AND "year", etc.
 let groupByDefinition = [ "year", "month", "day", "hour" ];
 
-function getTimeSeriesQuery(groupByLevel, categoryId, userId, start, end) {
+function getTimeSeriesQuery(groupByLevel, categoryId, userId, start, end, offset) {
     let match = {
         "$match": {
             "$and": [
@@ -320,7 +322,7 @@ function getTimeSeriesQuery(groupByLevel, categoryId, userId, start, end) {
         "$project": {
             "unix_timestamp": {
                 "$add": [
-                    new Date(0),
+                    new Date(offset),
                     "$unix_timestamp"
                 ]
             }
