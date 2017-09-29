@@ -3,6 +3,8 @@ var expressJoi = require('express-joi');
 var router = express.Router();
 let mongo = require('mongodb');
 let secureRoute = require('./secure');
+let moment = require("moment");
+let util = require("./util");
 
 router.use(secureRoute);
 
@@ -22,7 +24,7 @@ var getInstantsSchema = {
     category_id: Joi.types.string().required()
 };
 
-router.get('/instants', expressJoi.joiValidate(getInstantsSchema), handleGetInstants);
+router.get('/instants', expressJoi.joiValidate(getInstantsSchema), util.asyncErrorHandler(handleGetInstants));
 
 async function handleGetInstants(req, res) {
     let db = req.app.get("db");
@@ -38,11 +40,63 @@ async function handleGetInstants(req, res) {
     res.send(instants);
 }
 
+router.put('/category', util.asyncErrorHandler(handleEditCategory));
+
+async function handleEditCategory(req, res) {
+    let db = req.app.get("db");
+
+    // instant ids to delete
+    let instantIds = req.body["instantIds"];
+
+    // use the mongo-reported number of deleted records, in the off-chance that a user
+    // tries to delete an instant that they do not own, to ensure that the updated
+    // category count value is accurate/in-sync
+    let deletedCount = 0;
+
+    if (instantIds.length > 0) {
+        let criteria = {
+            $and: [
+                {
+                    _id: {
+                        $in: instantIds.map(id => mongo.ObjectId(id))
+                    }
+                },
+                {
+                    user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
+                }
+            ]
+        };
+
+        // delete any provided instants
+        let results = await db.collection(instantsCollectionName).removeMany(criteria);
+        deletedCount = results.deletedCount;
+    }
+
+    let criteria = {
+        _id: mongo.ObjectId(req.body["categoryId"]),
+        user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
+    };
+
+    let updateOperation = {
+        $set: {
+            name: req.body["categoryName"]
+        },
+        $inc: {
+            count: -1*deletedCount
+        }
+    };
+
+    // update category name
+    await db.collection(categoriesCollectionName).updateOne(criteria, updateOperation);
+
+    res.send({});
+}
+
 /**
  * retrieve all categories in the system
  */
 
-router.get('/categories', handleGetCategories);
+router.get('/categories', util.asyncErrorHandler(handleGetCategories));
 
 async function handleGetCategories(req, res) {
     let db = req.app.get("db");
@@ -59,7 +113,7 @@ async function handleGetCategories(req, res) {
  * retrieve a specified category
  */
 
-router.get('/category/:id', handleGetCategory);
+router.get('/category/:id', util.asyncErrorHandler(handleGetCategory));
 
 async function handleGetCategory(req, res) {
     let db = req.app.get("db");
@@ -78,7 +132,7 @@ async function handleGetCategory(req, res) {
  * create a new category
  */
 
-router.post('/category', handlePostCategory);
+router.post('/category', util.asyncErrorHandler(handlePostCategory));
 
 async function handlePostCategory(req, res) {
     let db = req.app.get("db");
@@ -101,7 +155,7 @@ async function handlePostCategory(req, res) {
  * a DELETE request that contains a body
  */
 
-router.post('/categories', handleDeleteCategories);
+router.post('/categories', util.asyncErrorHandler(handleDeleteCategories));
 
 async function handleDeleteCategories(req, res) {
     let db = req.app.get("db");
@@ -122,6 +176,8 @@ async function handleDeleteCategories(req, res) {
 
     let result = await categoriesCollection.deleteMany(criteria);
 
+    // TODO delete instants corresponding to categories being deleted
+
     res.send(result);
 }
 
@@ -129,7 +185,7 @@ async function handleDeleteCategories(req, res) {
  * increment count value
  */
 
-router.post('/increment-category-count/:id', handleIncrementCategoryCount);
+router.post('/increment-category-count/:id', util.asyncErrorHandler(handleIncrementCategoryCount));
 
 async function handleIncrementCategoryCount(req, res) {
     let db = req.app.get("db");
@@ -178,7 +234,7 @@ var getTimeSeriesSchema = {
     groupBy: Joi.types.string().valid("hour", "day").required()
 };
 
-router.get('/time-series', expressJoi.joiValidate(getTimeSeriesSchema), handleGetTimeseries);
+router.get('/time-series', expressJoi.joiValidate(getTimeSeriesSchema), util.asyncErrorHandler(handleGetTimeseries));
 
 async function handleGetTimeseries(req, res) {
     let groupByLevel = req.query["groupBy"];
@@ -207,7 +263,7 @@ async function handleGetTimeseries(req, res) {
     // map the component date returned by the query back to a single unix timestamp value
     results = results.map(r => {
        return {
-           unix_timestamp: Date.UTC(r._id.year, r._id.month-1, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0),
+           unix_timestamp: new Date(r._id.year, r._id.month-1, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0).getTime(),
            count: r.count
        };
     });
