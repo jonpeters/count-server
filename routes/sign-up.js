@@ -24,7 +24,7 @@ async function handleSignUp(req, res) {
         return;
     }
 
-    var result = await db.collection("users").insertOne({ username: username, password: bcrypt.hashSync("password") });
+    var result = await db.collection("users").insertOne({ username: username, password: bcrypt.hashSync(password) });
     user = result.ops[0];
 
     common.returnSucessfulResponseWithToken(req, res, user);

@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "nodemon --inspect ./bin/www"
+    "start": "nodemon --inspect ./bin/www",
+    "test": "node_modules/.bin/mocha -w"
   },
   "dependencies": {
     "bcrypt-nodejs": "0.0.3",
@@ -18,5 +19,11 @@
     "mongodb": "^2.2.31",
     "morgan": "~1.8.1",
     "serve-favicon": "~2.4.2"
+  },
+  "devDependencies": {
+    "chai": "^4.1.2",
+    "chai-http": "^3.0.0",
+    "mocha": "^4.0.0",
+    "should": "^13.1.0"
   }
 }

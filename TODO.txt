@@ -4,3 +4,19 @@
 
 - fill in gaps in time-series data to get a truer graph; e.g. the graph end-bound is only the latest data in the
 system but probably should be "now"
+
+- add tests
+    * create well-defined data set
+    * floor start date and ceiling end date
+    * hour vs day
+    * history length
+    * range accuracy
+    * test all end-point operations (create, query-by for different users, etc)
+
+- add readme / quick-start
+
+- add history
+
+// is provided as the start time, truncate it to 11:00:00,
++    // adjusting the start time to account for history length
++    start = (start - (start % groupByValue)) - (groupByValue * req.query["history_length"]);

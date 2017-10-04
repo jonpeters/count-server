@@ -6,7 +6,6 @@ var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var config = require('./config.js');
 var mongo = require('mongodb');
-var jwt = require('jsonwebtoken');
 
 
 var index = require('./routes/index');
@@ -54,7 +53,7 @@ app.use(function(err, req, res, next) {
 });
 
 // create mongo connection
-mongo.MongoClient.connect(config.databaseUrl, (err, db) => {
+mongo.MongoClient.connect(config.mongoURI[app.settings.env], (err, db) => {
     app.set('db', db);
 });
 

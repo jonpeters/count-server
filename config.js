@@ -1,4 +1,8 @@
 module.exports = {
     "secret": "somesupersecretkey",
-    "databaseUrl": "mongodb://localhost:27017/count"
+    "databaseUrl": "mongodb://localhost/count",
+    "mongoURI": {
+        development: 'mongodb://localhost/count',
+        test: 'mongodb://localhost/count-test'
+    }
 }
