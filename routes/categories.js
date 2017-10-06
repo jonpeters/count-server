@@ -21,7 +21,7 @@ let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
 
 var getInstantsSchema = {
     query: {
-        category_id: Joi.string().required()
+        categoryId: Joi.string().required()
     }
 };
 
@@ -31,7 +31,7 @@ async function handleGetInstants(req, res) {
     let db = req.app.get("db");
 
     let criteria = {
-        category_id: mongo.ObjectId(req.query["category_id"]),
+        category_id: mongo.ObjectId(req.query.categoryId),
         user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
     };
 
@@ -60,7 +60,7 @@ async function handleEditCategory(req, res) {
     let db = req.app.get("db");
 
     // instant ids to delete
-    let instantIds = req.body["instantIds"];
+    let instantIds = req.body.instantIds;
 
     // use the mongo-reported number of deleted records, in the off-chance that a user
     // tries to delete an instant that they do not own, to ensure that the updated
@@ -87,13 +87,13 @@ async function handleEditCategory(req, res) {
     }
 
     let criteria = {
-        _id: mongo.ObjectId(req.body["categoryId"]),
+        _id: mongo.ObjectId(req.body.categoryId),
         user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
     };
 
     let updateOperation = {
         $set: {
-            name: req.body["categoryName"]
+            name: req.body.categoryName
         },
         $inc: {
             count: -1*deletedCount
@@ -290,7 +290,7 @@ var getTimeSeriesSchema = {
     query: {
         start: Joi.number().required(),
         end: Joi.number().required(),
-        category_id: Joi.string().required(),
+        categoryId: Joi.string().required(),
         groupBy: Joi.string().valid("hour", "day").required(),
         offset: Joi.number().required()
     }
@@ -299,18 +299,18 @@ var getTimeSeriesSchema = {
 router.get('/time-series', expressJoi(getTimeSeriesSchema), util.asyncErrorHandler(handleGetTimeseries));
 
 async function handleGetTimeseries(req, res) {
-    let groupByLevel = req.query["groupBy"];
+    let groupByLevel = req.query.groupBy;
     let groupByValue = groupByLevel === "hour" ? _1_HOUR_IN_MS : _24_HOURS_IN_MS;
-    let offset = req.query["offset"] * -1 * 60 * 1000;
+    let offset = req.query.offset * -1 * 60 * 1000;
 
-    let start = req.query["start"];
+    let start = req.query.start;
 
     // truncate to start of unit, e.g. when grouping by hour, it's more
     // correct to get all data for that entire hour, thus if 11:47:00
     // is provided as the start time, truncate it to 11:00:00
     start = start - (start % groupByValue);
 
-    let end = req.query["end"];
+    let end = req.query.end;
 
     // truncate to start of unit then add 1 unit, e.g. again this gets
     // the full hour of data for the hour in which the end date falls
@@ -320,7 +320,7 @@ async function handleGetTimeseries(req, res) {
     let instantsCollection = await db.collection(instantsCollectionName);
 
     // execute query via mongo aggregation framework
-    let timeSeriesQuery = getTimeSeriesQuery(groupByLevel, req.query["category_id"], req.tokenDecoded._id, start, end, offset);
+    let timeSeriesQuery = getTimeSeriesQuery(groupByLevel, req.query.categoryId, req.tokenDecoded._id, start, end, offset);
     let results = await instantsCollection.aggregate(timeSeriesQuery).toArray();
 
     // map the component date returned by the query back to a single unix timestamp value
