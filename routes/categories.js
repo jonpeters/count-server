@@ -1,10 +1,11 @@
 var express = require('express');
-var expressJoi = require('express-joi');
 var router = express.Router();
 let mongo = require('mongodb');
 let secureRoute = require('./secure');
 let moment = require("moment");
 let util = require("./util");
+let Joi = require('joi');
+let expressJoi = require('express-joi-validator');
 
 router.use(secureRoute);
 
@@ -14,17 +15,17 @@ let instantsCollectionName = "instants";
 let _1_HOUR_IN_MS = 60*60*1000;
 let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
 
-var Joi = expressJoi.Joi;
-
 /**
  * retrieve all instants for a category
  */
 
 var getInstantsSchema = {
-    category_id: Joi.types.string().required()
+    query: {
+        category_id: Joi.string().required()
+    }
 };
 
-router.get('/instants', expressJoi.joiValidate(getInstantsSchema), util.asyncErrorHandler(handleGetInstants));
+router.get('/instants', expressJoi(getInstantsSchema), util.asyncErrorHandler(handleGetInstants));
 
 async function handleGetInstants(req, res) {
     let db = req.app.get("db");
@@ -40,7 +41,20 @@ async function handleGetInstants(req, res) {
     res.send(instants);
 }
 
-router.put('/category', util.asyncErrorHandler(handleEditCategory));
+/**
+ * edit a category. as part of the edit, the client may pass an array of
+ * instant ids to be deleted
+ */
+
+var editCategorySchema = {
+    body: {
+        instantIds: Joi.array().required(),
+        categoryId: Joi.string().required(),
+        categoryName: Joi.string().required()
+    }
+};
+
+router.put('/category', expressJoi(editCategorySchema), util.asyncErrorHandler(handleEditCategory));
 
 async function handleEditCategory(req, res) {
     let db = req.app.get("db");
@@ -96,6 +110,10 @@ async function handleEditCategory(req, res) {
  * retrieve all categories in the system
  */
 
+/**
+ * NOTE no input validation required; gets all categories for user based on user token
+ */
+
 router.get('/categories', util.asyncErrorHandler(handleGetCategories));
 
 async function handleGetCategories(req, res) {
@@ -113,15 +131,21 @@ async function handleGetCategories(req, res) {
  * retrieve a specified category
  */
 
-router.get('/category/:id', util.asyncErrorHandler(handleGetCategory));
+var getCategorySchema = {
+    params: {
+        categoryId: Joi.string().required()
+    }
+};
+
+router.get('/category/:categoryId', expressJoi(getCategorySchema), util.asyncErrorHandler(handleGetCategory));
 
 async function handleGetCategory(req, res) {
     let db = req.app.get("db");
 
     let criteria = {
-        _id: mongo.ObjectId(req.params.id),
+        _id: mongo.ObjectId(req.params.categoryId),
         user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
-    }
+    };
 
     let result = await db.collection(categoriesCollectionName).findOne(criteria);
 
@@ -132,14 +156,20 @@ async function handleGetCategory(req, res) {
  * create a new category
  */
 
-router.post('/category', util.asyncErrorHandler(handlePostCategory));
+var postCategorySchema = {
+    body: {
+        name: Joi.string().required()
+    }
+};
+
+router.post('/category', expressJoi(postCategorySchema), util.asyncErrorHandler(handlePostCategory));
 
 async function handlePostCategory(req, res) {
     let db = req.app.get("db");
     let categoriesCollection = await db.collection(categoriesCollectionName);
 
     // set the parent user reference
-    let object = Object.assign({}, req.body, { user_id: mongo.ObjectId(req.tokenDecoded._id) });
+    let object = Object.assign({}, req.body, { user_id: mongo.ObjectId(req.tokenDecoded._id), count: 0 });
 
     // insert
     let result = await categoriesCollection.insertOne(object);
@@ -155,7 +185,11 @@ async function handlePostCategory(req, res) {
  * a DELETE request that contains a body
  */
 
-router.post('/categories', util.asyncErrorHandler(handleDeleteCategories));
+var deleteCategoriesSchema = {
+    body: Joi.array().items(Joi.string()).required()
+};
+
+router.post('/categories', expressJoi(deleteCategoriesSchema), util.asyncErrorHandler(handleDeleteCategories));
 
 async function handleDeleteCategories(req, res) {
     let db = req.app.get("db");
@@ -203,13 +237,20 @@ async function handleDeleteCategories(req, res) {
  * increment count value
  */
 
-router.post('/increment-category-count/:id', util.asyncErrorHandler(handleIncrementCategoryCount));
+var incrementCategoryCountSchema = {
+    params: {
+        categoryId: Joi.string().required()
+    }
+};
+
+router.post('/increment-category-count/:categoryId', expressJoi(incrementCategoryCountSchema),
+    util.asyncErrorHandler(handleIncrementCategoryCount));
 
 async function handleIncrementCategoryCount(req, res) {
     let db = req.app.get("db");
     let categoriesCollection = await db.collection(categoriesCollectionName);
 
-    let categoryId = mongo.ObjectId(req.params.id);
+    let categoryId = mongo.ObjectId(req.params.categoryId);
     let userId = mongo.ObjectId(req.tokenDecoded._id);
 
     let criteria = {
@@ -246,14 +287,16 @@ async function handleIncrementCategoryCount(req, res) {
  */
 
 var getTimeSeriesSchema = {
-    start: Joi.types.number().required(),
-    end: Joi.types.number().required(),
-    category_id: Joi.types.string().required(),
-    groupBy: Joi.types.string().valid("hour", "day").required(),
-    offset: Joi.types.number().required()
+    query: {
+        start: Joi.number().required(),
+        end: Joi.number().required(),
+        category_id: Joi.string().required(),
+        groupBy: Joi.string().valid("hour", "day").required(),
+        offset: Joi.number().required()
+    }
 };
 
-router.get('/time-series', expressJoi.joiValidate(getTimeSeriesSchema), util.asyncErrorHandler(handleGetTimeseries));
+router.get('/time-series', expressJoi(getTimeSeriesSchema), util.asyncErrorHandler(handleGetTimeseries));
 
 async function handleGetTimeseries(req, res) {
     let groupByLevel = req.query["groupBy"];
