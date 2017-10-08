@@ -308,13 +308,13 @@ async function handleGetTimeseries(req, res) {
     // truncate to start of unit, e.g. when grouping by hour, it's more
     // correct to get all data for that entire hour, thus if 11:47:00
     // is provided as the start time, truncate it to 11:00:00
-    start = start - (start % groupByValue);
+    start = start - (start % groupByValue) - offset;
 
     let end = req.query.end;
 
     // truncate to start of unit then add 1 unit, e.g. again this gets
     // the full hour of data for the hour in which the end date falls
-    end = end - (end % groupByValue) + groupByValue;
+    end = end - (end % groupByValue) + groupByValue - offset;
 
     let db = req.app.get("db");
     let instantsCollection = await db.collection(instantsCollectionName);
@@ -329,9 +329,26 @@ async function handleGetTimeseries(req, res) {
            unix_timestamp: new Date(r._id.year, r._id.month-1, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0).getTime(),
            count: r.count
        };
-    });
+    }).reduce((a, c) => {
+        a[c.unix_timestamp] = c;
+        return a;
+    }, {});
 
-    res.send(results);
+    let data = [];
+
+    // fill in gaps; i.e. hours/days with no data points
+    for (let i=start; i<end; i += groupByValue) {
+        if (results[i]) {
+            data.push(results[i]);
+        } else {
+            data.push({
+                unix_timestamp: i,
+                count: 0
+            });
+        }
+    }
+
+    res.send(data);
 }
 
 // ordered by increasing dependency; i.e. "month" is dependant on "year", "day" is dependent on "month" AND "year", etc.
