@@ -11,6 +11,7 @@ router.use(secureRoute);
 
 let categoriesCollectionName = "categories";
 let instantsCollectionName = "instants";
+let alertsCollectionName = "alerts";
 
 let _1_HOUR_IN_MS = 60*60*1000;
 let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
@@ -240,6 +241,9 @@ async function handleDeleteCategories(req, res) {
 var incrementCategoryCountSchema = {
     params: {
         categoryId: Joi.string().required()
+    },
+    query: {
+        offset: Joi.number().required()
     }
 };
 
@@ -279,7 +283,89 @@ async function handleIncrementCategoryCount(req, res) {
         user_id: userId     // allow access to only requesting user's data
     });
 
-    res.send(result.value);
+    // run analysis to find statistical anomaly
+    let alerts = await doAnalysis(req.query.offset, categoryId, req.tokenDecoded._id, db);
+
+    res.send({
+        category: result.value,
+        alerts: alerts
+    });
+}
+
+async function doAnalysis(clientOffset, categoryId, userId, db) {
+    // return value
+    let alerts = [];
+
+    let offset = clientOffset * -1 * 60 * 1000;
+
+    // aggregate data by hour
+    let groupByValue = _1_HOUR_IN_MS;
+
+    let start = Date.now();
+
+    // round down to start of current hour/day
+    start -= (start % groupByValue);
+
+    // subtract off the length of the SMA being used, e.g. the analysis is being performed
+    // on the "latest"/current hour/day, but 20 hours/days of historical data are needed
+    // it is currently hard-coded to 20 (actually 19 since the current value is needed plus
+    // the previous 19), and will be more robust in the future
+    start -= (groupByValue * 19);
+
+    let end = Date.now();
+
+    // round down to start of current hour/day and add 1 hour/day
+    end = end - (end % groupByValue) + groupByValue;
+
+    // execute the query
+    let data = await executeTimeSeriesQuery("hour", categoryId, userId, start, end, offset, groupByValue, db);
+
+    // flatten the object to simply the numeric value
+    let countData = data.map(i => i.count);
+
+    // get number of standard deviations for current (i.e. latest hour/day) data point
+    let numStandarDeviations = calculateNumberOfStandardDeviations(countData);
+
+    // note, ignoring "low" number of standard deviations for now, since analysis is always
+    // performed on the "current" hour/day, which by definition is not complete
+    // TODO might also want to allow the user to set their own threshold
+    if (numStandarDeviations > 3) {
+
+        // find if an alert has already been generated for this period
+        let alert = await db.collection(alertsCollectionName).findOne(
+            {
+                unix_timestamp: data[data.length-1].unix_timestamp,
+                group_by_level: "hour",
+                category_id: mongo.ObjectId(categoryId)
+            }
+        );
+
+        // this the first alert detected for this period and aggregation level
+        if (!alert) {
+            alert = await db.collection(alertsCollectionName).insertOne(
+                {
+                    unix_timestamp: data[data.length-1].unix_timestamp,
+                    group_by_level: "hour",
+                    category_id: mongo.ObjectId(categoryId),
+                    value: data[data.length-1].count
+                }
+            );
+
+            alerts.push(alert.ops[0]);
+        }
+    }
+
+    // TODO analysis by day
+
+    return alerts;
+}
+
+function calculateNumberOfStandardDeviations(data) {
+    let mean = data.reduce((a, c) => a + c, 0) / data.length;
+    let temp = data.map(v => Math.pow(v-mean, 2));
+    let tempMean = temp.reduce((a, c) => a + c, 0) / temp.length;
+    let sd = Math.sqrt(tempMean);
+    return (data[data.length-1]-mean) / sd;
 }
 
 /**
@@ -308,27 +394,34 @@ async function handleGetTimeseries(req, res) {
     // truncate to start of unit, e.g. when grouping by hour, it's more
     // correct to get all data for that entire hour, thus if 11:47:00
     // is provided as the start time, truncate it to 11:00:00
-    start = start - (start % groupByValue) - offset;
+    start = start - (start % groupByValue);
 
     let end = req.query.end;
 
     // truncate to start of unit then add 1 unit, e.g. again this gets
     // the full hour of data for the hour in which the end date falls
-    end = end - (end % groupByValue) + groupByValue - offset;
+    end = end - (end % groupByValue) + groupByValue;
 
-    let db = req.app.get("db");
+    // execute the query
+    data = await executeTimeSeriesQuery(groupByLevel, req.query.categoryId, req.tokenDecoded._id,
+        start, end, offset, groupByValue, req.app.get("db"));
+
+    res.send(data);
+}
+
+async function executeTimeSeriesQuery(groupByLevel, categoryId, userId, start, end, offset, groupByValue, db) {
     let instantsCollection = await db.collection(instantsCollectionName);
 
     // execute query via mongo aggregation framework
-    let timeSeriesQuery = getTimeSeriesQuery(groupByLevel, req.query.categoryId, req.tokenDecoded._id, start, end, offset);
+    let timeSeriesQuery = getTimeSeriesQuery(groupByLevel, categoryId, userId, start, end, offset);
     let results = await instantsCollection.aggregate(timeSeriesQuery).toArray();
 
     // map the component date returned by the query back to a single unix timestamp value
     results = results.map(r => {
-       return {
-           unix_timestamp: new Date(r._id.year, r._id.month-1, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0).getTime(),
-           count: r.count
-       };
+        return {
+            unix_timestamp: new Date(r._id.year, r._id.month-1, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0).getTime(),
+            count: r.count
+        };
     }).reduce((a, c) => {
         a[c.unix_timestamp] = c;
         return a;
@@ -348,7 +441,7 @@ async function handleGetTimeseries(req, res) {
         }
     }
 
-    res.send(data);
+    return data;
 }
 
 // ordered by increasing dependency; i.e. "month" is dependant on "year", "day" is dependent on "month" AND "year", etc.
