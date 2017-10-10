@@ -430,7 +430,7 @@ async function executeTimeSeriesQuery(groupByLevel, categoryId, userId, start, e
     let data = [];
 
     // fill in gaps; i.e. hours/days with no data points
-    for (let i=start; i<end; i += groupByValue) {
+    for (let i=start-offset; i<end; i += groupByValue) {
         if (results[i]) {
             data.push(results[i]);
         } else {
