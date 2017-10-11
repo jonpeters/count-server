@@ -298,8 +298,16 @@ async function doAnalysis(clientOffset, categoryId, userId, db) {
 
     let offset = clientOffset * -1 * 60 * 1000;
 
-    // aggregate data by hour
-    let groupByValue = _1_HOUR_IN_MS;
+    alerts.push(await doAnalysisHelper("hour", categoryId, userId, offset, db));
+    alerts.push(await doAnalysisHelper("day", categoryId, userId, offset, db));
+
+    alerts = alerts.filter(alert => alert != null);
+
+    return alerts;
+}
+
+async function doAnalysisHelper(groupByLevel, categoryId, userId, offset, db) {
+    let groupByValue = groupByLevel == "hour" ? _1_HOUR_IN_MS : _24_HOURS_IN_MS;
 
     let start = Date.now();
 
@@ -318,46 +326,46 @@ async function doAnalysis(clientOffset, categoryId, userId, db) {
     end = end - (end % groupByValue) + groupByValue;
 
     // execute the query
-    let data = await executeTimeSeriesQuery("hour", categoryId, userId, start, end, offset, groupByValue, db);
+    let data = await executeTimeSeriesQuery(groupByLevel, categoryId, userId, start, end, offset, groupByValue, db);
 
     // flatten the object to simply the numeric value
     let countData = data.map(i => i.count);
 
     // get number of standard deviations for current (i.e. latest hour/day) data point
-    let numStandarDeviations = calculateNumberOfStandardDeviations(countData);
+    let numStandardDeviations = calculateNumberOfStandardDeviations(countData);
+
+    let newAlert = null;
 
     // note, ignoring "low" number of standard deviations for now, since analysis is always
     // performed on the "current" hour/day, which by definition is not complete
     // TODO might also want to allow the user to set their own threshold
-    if (numStandarDeviations > 3) {
+    if (numStandardDeviations > 3) {
 
         // find if an alert has already been generated for this period
-        let alert = await db.collection(alertsCollectionName).findOne(
+        let existingAlert = await db.collection(alertsCollectionName).findOne(
             {
                 unix_timestamp: data[data.length-1].unix_timestamp,
-                group_by_level: "hour",
+                group_by_level: groupByLevel,
                 category_id: mongo.ObjectId(categoryId)
             }
         );
 
         // this the first alert detected for this period and aggregation level
-        if (!alert) {
-            alert = await db.collection(alertsCollectionName).insertOne(
+        if (!existingAlert) {
+            newAlert = await db.collection(alertsCollectionName).insertOne(
                 {
                     unix_timestamp: data[data.length-1].unix_timestamp,
-                    group_by_level: "hour",
+                    group_by_level: groupByLevel,
                     category_id: mongo.ObjectId(categoryId),
                     value: data[data.length-1].count
                 }
             );
 
-            alerts.push(alert.ops[0]);
+            newAlert = newAlert.ops[0];
         }
     }
 
-    // TODO analysis by day
-
-    return alerts;
+    return newAlert;
 }
 
 function calculateNumberOfStandardDeviations(data) {
