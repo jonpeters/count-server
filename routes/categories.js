@@ -22,7 +22,9 @@ let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
 
 var getInstantsSchema = {
     query: {
-        categoryId: Joi.string().required()
+        categoryId: Joi.string().required(),
+        pageIndex: Joi.number().required(),
+        pageSize: Joi.number().required()
     }
 };
 
@@ -36,10 +38,16 @@ async function handleGetInstants(req, res) {
         user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
     };
 
-    // TODO support paging
-    let instants = await db.collection(instantsCollectionName).find(criteria).toArray();
+    let instants = await db.collection(instantsCollectionName)
+        .find(criteria)
+        .sort({ unix_timestamp: -1 })
+        .skip(req.query.pageIndex * req.query.pageSize)
+        .limit(req.query.pageSize)
+        .toArray();
 
-    res.send(instants);
+    let count = await db.collection(instantsCollectionName).count(criteria);
+
+    res.send({ instants: instants, count: count });
 }
 
 /**
@@ -377,7 +385,7 @@ function calculateNumberOfStandardDeviations(data) {
 }
 
 /**
- * retrieve instants data
+ * retrieve aggregated instants data
  */
 
 var getTimeSeriesSchema = {
