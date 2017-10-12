@@ -17,6 +17,26 @@ let _1_HOUR_IN_MS = 60*60*1000;
 let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
 
 /**
+ * find a category by name
+ */
+
+var getCategoryByNameSchema = {
+    params: {
+        categoryName: Joi.string().required()
+    }
+}
+
+router.get('/category-by-name/:categoryName', expressJoi(getCategoryByNameSchema), util.asyncErrorHandler(handleGetCategoryByName));
+
+async function handleGetCategoryByName(req, res) {
+    let db = req.app.get("db");
+
+    let result = await db.collection(categoriesCollectionName).findOne({ name: req.params.categoryName });
+
+    res.send(result);
+}
+
+/**
  * retrieve all instants for a category
  */
 
