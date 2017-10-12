@@ -31,7 +31,12 @@ router.get('/category-by-name/:categoryName', expressJoi(getCategoryByNameSchema
 async function handleGetCategoryByName(req, res) {
     let db = req.app.get("db");
 
-    let result = await db.collection(categoriesCollectionName).findOne({ name: req.params.categoryName });
+    let result = await db.collection(categoriesCollectionName).findOne(
+        {
+            name: req.params.categoryName,
+            user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
+        }
+    );
 
     res.send(result);
 }
