@@ -17,6 +17,34 @@ let _1_HOUR_IN_MS = 60*60*1000;
 let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
 
 /**
+ * retrieve all alerts for a category
+ */
+
+var getAlertsByCategorySchema = {
+    params: {
+        categoryId: Joi.string().required()
+    }
+};
+
+router.get('/alerts-by-category/:categoryId', expressJoi(getAlertsByCategorySchema), util.asyncErrorHandler(handleGetAlertsByCategory));
+
+async function handleGetAlertsByCategory(req, res) {
+    let db = req.app.get("db");
+
+    let criteria = {
+        category_id: mongo.ObjectId(req.params.categoryId),
+        user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
+    };
+
+    let alerts = await db.collection(alertsCollectionName)
+        .find(criteria)
+        .sort({ unix_timestamp: -1 })
+        .toArray();
+
+    res.send(alerts);
+}
+
+/**
  * find a category by name
  */
 
@@ -24,7 +52,7 @@ var getCategoryByNameSchema = {
     params: {
         categoryName: Joi.string().required()
     }
-}
+};
 
 router.get('/category-by-name/:categoryName', expressJoi(getCategoryByNameSchema), util.asyncErrorHandler(handleGetCategoryByName));
 
@@ -390,7 +418,8 @@ async function doAnalysisHelper(groupByLevel, categoryId, userId, offset, db) {
                     unix_timestamp: data[data.length-1].unix_timestamp,
                     group_by_level: groupByLevel,
                     category_id: mongo.ObjectId(categoryId),
-                    value: data[data.length-1].count
+                    value: data[data.length-1].count,
+                    user_id: mongo.ObjectId(userId)
                 }
             );
 
