@@ -489,7 +489,7 @@ async function handleGetTimeseries(req, res) {
     // truncate to start of unit, e.g. when grouping by hour, it's more
     // correct to get all data for that entire hour, thus if 11:47:00
     // is provided as the start time, truncate it to 11:00:00
-    start = start - (start % groupByValue);
+    start = (start - (start % groupByValue)) - offset;
 
     let end = req.query.end;
 
@@ -511,10 +511,13 @@ async function executeTimeSeriesQuery(groupByLevel, categoryId, userId, start, e
     let timeSeriesQuery = getTimeSeriesQuery(groupByLevel, categoryId, userId, start, end, offset);
     let results = await instantsCollection.aggregate(timeSeriesQuery).toArray();
 
+    // the difference between the server's timezone and the client's timezone
+    let offsetDiff = ((new Date()).getTimezoneOffset() * 60 * 1000) + offset;
+
     // map the component date returned by the query back to a single unix timestamp value
     results = results.map(r => {
         return {
-            unix_timestamp: new Date(r._id.year, r._id.month-1, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0).getTime(),
+            unix_timestamp: new Date(r._id.year, r._id.month-1, r._id.day, (r._id.hour != null ? r._id.hour : 0), 0, 0).getTime() - offsetDiff,
             count: r.count
         };
     }).reduce((a, c) => {
@@ -525,7 +528,7 @@ async function executeTimeSeriesQuery(groupByLevel, categoryId, userId, start, e
     let data = [];
 
     // fill in gaps; i.e. hours/days with no data points
-    for (let i=start-offset; i<end; i += groupByValue) {
+    for (let i=start; i<end; i += groupByValue) {
         if (results[i]) {
             data.push(results[i]);
         } else {
