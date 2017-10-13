@@ -6,6 +6,7 @@ let moment = require("moment");
 let util = require("./util");
 let Joi = require('joi');
 let expressJoi = require('express-joi-validator');
+let dataGenerator = require('../util/data-generator');
 
 router.use(secureRoute);
 
@@ -15,6 +16,30 @@ let alertsCollectionName = "alerts";
 
 let _1_HOUR_IN_MS = 60*60*1000;
 let _24_HOURS_IN_MS = 24*_1_HOUR_IN_MS;
+
+/**
+ * generate random data for demo purposes
+ */
+
+var generateInstantsForCategorySchema = {
+    params: {
+        categoryId: Joi.string().required()
+    },
+    query: {
+        numDays: Joi.number().required()
+    }
+};
+
+router.post('/generate-instants-for-category/:categoryId', expressJoi(generateInstantsForCategorySchema), util.asyncErrorHandler(handleGenerateInstantsForCategory));
+
+async function handleGenerateInstantsForCategory(req, res) {
+    let db = req.app.get("db");
+    let userId = req.tokenDecoded._id;
+    let categoryId = req.params.categoryId;
+    let numDays = req.query.numDays;
+    dataGenerator.generate(db, numDays, userId, categoryId);
+    res.send(null);
+}
 
 /**
  * retrieve all alerts for a category
