@@ -61,6 +61,9 @@ async function handleGetAlertsByCategory(req, res) {
         user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
     };
 
+    // create index if necessary on user_id
+    db.collection(categoriesCollectionName).createIndex({ category_id: 1, user_id: 1 });
+
     let alerts = await db.collection(alertsCollectionName)
         .find(criteria)
         .sort({ unix_timestamp: -1 })
@@ -115,6 +118,9 @@ async function handleGetInstants(req, res) {
         category_id: mongo.ObjectId(req.query.categoryId),
         user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
     };
+
+    // create index if necessary on user_id
+    db.collection(categoriesCollectionName).createIndex({ category_id: 1, user_id: 1 });
 
     let instants = await db.collection(instantsCollectionName)
         .find(criteria)
@@ -209,6 +215,9 @@ async function handleGetCategories(req, res) {
     let criteria = {
         user_id: mongo.ObjectId(req.tokenDecoded._id)   // allow access to only requesting user's data
     };
+
+    // create index if necessary on user_id
+    db.collection(categoriesCollectionName).createIndex({ user_id: 1 });
 
     let items = await db.collection(categoriesCollectionName).find(criteria).toArray();
     res.send(items);
