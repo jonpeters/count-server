@@ -34,6 +34,9 @@ app.use('/api/secure', categories);
 app.use('/api/authenticate', auth);
 app.use('/api/sign-up', signUp);
 
+// re-write client-side paths
+app.get('/app/*', (req, res, next) => res.sendFile(path.resolve('public/index.html')));
+
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   var err = new Error('Not Found');
