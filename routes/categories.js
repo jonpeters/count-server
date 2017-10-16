@@ -407,7 +407,7 @@ async function doAnalysisHelper(groupByLevel, categoryId, userId, offset, db) {
     let start = Date.now();
 
     // round down to start of current hour/day
-    start -= (start % groupByValue);
+    start -= (start % groupByValue) + offset;
 
     // subtract off the length of the SMA being used, e.g. the analysis is being performed
     // on the "latest"/current hour/day, but 20 hours/days of historical data are needed
