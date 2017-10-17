@@ -12,4 +12,4 @@ This is the back-end project for https://github.com/jonpeters/count.git
 
 ## Development server
 
-Run `npm start` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files.
+Run `npm start` for a dev server. The application will be available at `http://localhost:3000/`. The app will automatically reload if you change any of the source files.
